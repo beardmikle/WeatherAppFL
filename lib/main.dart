@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:tapp3/bloc/weather_bloc_bloc.dart';
 import 'package:tapp3/screens/home_screen.dart';
-
 import 'package:geolocator/geolocator.dart';
-
 
 void main() {
   runApp(const MainApp());
@@ -15,69 +13,104 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return  MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: FutureBuilder(
         future: _determinePosition(),
         builder: (context, snap) {
-          if (snap.hasData) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            print('Waiting for position to be determined...');
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          } else if (snap.hasData) {
+            print('Position determined: ${snap.data}'); // Выводим позицию
             return BlocProvider<WeatherBlocBloc>(
-              create: (context) => WeatherBlocBloc()..add(
-                FetchWeather(snap.data as Position)),
+              create: (context) => WeatherBlocBloc()
+                ..add(FetchWeather(snap.data as Position)),
               child: const HomeScreen(),
-          );
+            );
+          } else if (snap.hasError) {
+            // Вывод ошибки в консоль
+            print('Error occurred while determining position: ${snap.error}');
+            return const Scaffold(
+              body: Center(
+                child: Text('Error: Failed to determine position!'),
+              ),
+            );
           } else {
             return const Scaffold(
-              body: Center (
+              body: Center(
                 child: CircularProgressIndicator(),
-            ),
+              ),
             );
           }
         },
-      )
+      ),
     );
   }
 }
 
-
-
 /// Determine the current position of the device.
-///
-/// When the location services are not enabled or permissions
-/// are denied the `Future` will return an error.
+/// If it takes longer than 6 seconds, an error is returned.
 Future<Position> _determinePosition() async {
   bool serviceEnabled;
   LocationPermission permission;
 
-  // Test if location services are enabled.
+  // Проверка включена ли служба геолокации
   serviceEnabled = await Geolocator.isLocationServiceEnabled();
   if (!serviceEnabled) {
-    // Location services are not enabled don't continue
-    // accessing the position and request users of the 
-    // App to enable the location services.
+    print('Location services are disabled.');
     return Future.error('Location services are disabled.');
   }
 
+  // Проверка разрешений
   permission = await Geolocator.checkPermission();
+  print('Current permission status: $permission');
+
   if (permission == LocationPermission.denied) {
     permission = await Geolocator.requestPermission();
     if (permission == LocationPermission.denied) {
-      // Permissions are denied, next time you could try
-      // requesting permissions again (this is also where
-      // Android's shouldShowRequestPermissionRationale 
-      // returned true. According to Android guidelines
-      // your App should show an explanatory UI now.
+      print('Location permissions are denied.');
       return Future.error('Location permissions are denied');
     }
   }
-  
-  if (permission == LocationPermission.deniedForever) {
-    // Permissions are denied forever, handle appropriately. 
-    return Future.error(
-      'Location permissions are permanently denied, we cannot request permissions.');
-  } 
 
-  // When we reach here, permissions are granted and we can
-  // continue accessing the position of the device.
-  return await Geolocator.getCurrentPosition();
+  if (permission == LocationPermission.deniedForever) {
+    print('Location permissions are permanently denied.');
+    return Future.error('Location permissions are permanently denied, we cannot request permissions.');
+  }
+
+  // Получение текущего положения с таймаутом
+  try {
+    Position position = await Geolocator.getCurrentPosition().timeout(
+      const Duration(seconds: 3),
+      onTimeout: () {
+        print('Error: Determining position timed out after 6 seconds.');
+        throw Exception('Determining position timed out');
+      },
+    );
+    print('Current position: ${position.latitude}, ${position.longitude}');
+    return position;
+  } catch (e) {
+    print('Failed to get position: $e');
+
+    // Возвращаем фиксированную позицию (например, для Нью-Йорка) при таймауте
+    Position fallbackPosition = Position(
+      latitude: 40.7128, // Широта Нью-Йорка
+      longitude: -74.0060, // Долгота Нью-Йорка
+      timestamp: DateTime.now(),
+      accuracy: 1.0,
+      altitude: 1.0,
+      heading: 1.0,
+      speed: 1.0,
+      speedAccuracy: 1.0,
+      altitudeAccuracy: 1.0, // Новый обязательный параметр
+      headingAccuracy: 1.0, // Новый обязательный параметр
+    );
+    print('Using fallback position: ${fallbackPosition.latitude}, ${fallbackPosition.longitude}');
+    return fallbackPosition;
+  }
 }

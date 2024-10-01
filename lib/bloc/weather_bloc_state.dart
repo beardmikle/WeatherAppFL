@@ -12,10 +12,10 @@ final class WeatherBlocInitial extends WeatherBlocState {}
 final class WeatherBlocLoading extends WeatherBlocState {}
 final class WeatherBlocFailure extends WeatherBlocState {}
 final class WeatherBlocSuccess extends WeatherBlocState {
-  final Weather weather;
+	final Weather weather;
 
-  const WeatherBlocSuccess(this.weather);
+	const WeatherBlocSuccess(this.weather);
 
-  @override
+	@override
   List<Object> get props => [weather];
 }
